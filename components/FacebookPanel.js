@@ -1,73 +1,79 @@
-// components/SocialPanel.js
-// Twitter/X feeds via rss.app — no API key needed
+// components/FacebookPanel.js
+// Facebook Page posts via Graph API
 
 import { useEffect, useState, useCallback } from "react";
 import { formatDistanceToNow, parseISO } from "date-fns";
-import { TWITTER_ACCOUNTS } from "../lib/config";
+import { FACEBOOK_PAGES } from "../lib/config";
 
 function timeAgo(dateStr) {
   try { return formatDistanceToNow(parseISO(dateStr), { addSuffix: true }); }
   catch { return ""; }
 }
 
-function TweetCard({ tweet, account }) {
+function PostCard({ post, color }) {
   return (
     <article
-      onClick={() => window.open(tweet.url, "_blank")}
+      onClick={() => window.open(post.url, "_blank")}
       style={{
         borderBottom: "1px solid #1a1a1a",
         padding: "12px 14px",
         cursor: "pointer",
-        borderLeft: `3px solid ${account.color}`,
+        borderLeft: `3px solid ${color}`,
         background: "transparent",
         transition: "background 0.15s",
       }}
       onMouseEnter={(e) => (e.currentTarget.style.background = "#0e0e0e")}
       onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
     >
-      {/* Time + X badge */}
-      <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 6 }}>
+      {/* Meta */}
+      <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 8 }}>
         <span style={{
-          background: "#000", color: "#fff", fontSize: 9,
+          background: "#1877f2", color: "#fff", fontSize: 9,
           fontWeight: 700, padding: "1px 5px", borderRadius: 2,
           fontFamily: "'DM Mono', monospace",
-        }}>𝕏</span>
-        <span style={{ color: account.color, fontSize: 10, fontFamily: "'DM Mono', monospace" }}>
-          @{account.handle}
-        </span>
+        }}>FB</span>
         <span style={{ marginLeft: "auto", color: "#444", fontSize: 9, fontFamily: "monospace" }}>
-          {timeAgo(tweet.createdAt)}
+          {timeAgo(post.createdAt)}
         </span>
       </div>
 
-      {/* Tweet image */}
-      {tweet.image && (
-        <div style={{ width: "100%", height: 100, marginBottom: 8, borderRadius: 4, overflow: "hidden", background: "#111" }}>
-          <img
-            src={tweet.image}
-            alt=""
-            style={{ width: "100%", height: "100%", objectFit: "cover" }}
-            onError={(e) => { e.target.parentNode.style.display = "none"; }}
-          />
+      {/* Image */}
+      {post.image && (
+        <div style={{ width: "100%", height: 90, marginBottom: 8, borderRadius: 4, overflow: "hidden", background: "#111" }}>
+          <img src={post.image} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }}
+            onError={(e) => { e.target.parentNode.style.display = "none"; }} />
         </div>
       )}
 
-      {/* Tweet text */}
-      {tweet.text && (
+      {/* Text */}
+      {post.text && (
         <div style={{
           color: "#ccc", fontSize: 12, fontFamily: "'DM Sans', sans-serif",
           lineHeight: 1.5, wordBreak: "break-word",
           display: "-webkit-box", WebkitLineClamp: 6,
           WebkitBoxOrient: "vertical", overflow: "hidden",
         }}>
-          {tweet.text}
+          {post.text}
         </div>
       )}
+
+      {/* Engagement */}
+      <div style={{ display: "flex", gap: 10, marginTop: 8 }}>
+        {[
+          { icon: "♥", val: post.likes },
+          { icon: "💬", val: post.comments },
+          { icon: "↺", val: post.shares },
+        ].map(({ icon, val }) => (
+          <span key={icon} style={{ color: "#444", fontSize: 9, fontFamily: "monospace", display: "flex", alignItems: "center", gap: 3 }}>
+            <span style={{ fontSize: 10 }}>{icon}</span>{val > 0 ? val.toLocaleString() : "0"}
+          </span>
+        ))}
+      </div>
     </article>
   );
 }
 
-function AccountFeed({ account }) {
+function PageFeed({ page }) {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -76,7 +82,7 @@ function AccountFeed({ account }) {
     setLoading(true);
     setError(null);
     try {
-      const res = await fetch(`/api/tweets?id=${account.id}`);
+      const res = await fetch(`/api/facebook?id=${page.id}`);
       const json = await res.json();
       if (!res.ok || json.error) {
         setError(json.error || "Failed to load");
@@ -88,9 +94,11 @@ function AccountFeed({ account }) {
     } finally {
       setLoading(false);
     }
-  }, [account.id]);
+  }, [page.id]);
 
   useEffect(() => { load(); }, [load]);
+
+  const color = data?.color || page.color;
 
   return (
     <div>
@@ -102,14 +110,9 @@ function AccountFeed({ account }) {
         background: "#0c0c0c",
         position: "sticky", top: 0, zIndex: 1,
       }}>
-        {account.profileImage && (
-          <img src={account.profileImage} alt="" style={{ width: 22, height: 22, borderRadius: "50%", objectFit: "cover", flexShrink: 0 }} />
-        )}
-        <span style={{ color: account.color, fontSize: 11, fontFamily: "'DM Sans', sans-serif", fontWeight: 600 }}>
-          {account.label}
-        </span>
-        <span style={{ color: "#444", fontSize: 10, fontFamily: "'DM Mono', monospace" }}>
-          @{account.handle}
+        <span style={{ color: "#1877f2", fontSize: 14, fontWeight: 700, lineHeight: 1 }}>f</span>
+        <span style={{ color, fontSize: 11, fontFamily: "'DM Sans', sans-serif", fontWeight: 600 }}>
+          {page.label}
         </span>
         {!loading && (
           <button onClick={load} style={{
@@ -126,7 +129,8 @@ function AccountFeed({ account }) {
           {[...Array(3)].map((_, i) => (
             <div key={i} style={{ marginBottom: 14 }}>
               <div style={{ height: 90, background: "#141414", borderRadius: 4, marginBottom: 6, animation: "pulse 1.5s ease-in-out infinite" }} />
-              <div style={{ height: 11, background: "#141414", borderRadius: 2, width: "75%", animation: "pulse 1.5s ease-in-out infinite" }} />
+              <div style={{ height: 11, background: "#141414", borderRadius: 2, width: "80%", marginBottom: 4, animation: "pulse 1.5s ease-in-out infinite" }} />
+              <div style={{ height: 10, background: "#141414", borderRadius: 2, width: "55%", animation: "pulse 1.5s ease-in-out infinite" }} />
             </div>
           ))}
         </div>
@@ -134,28 +138,34 @@ function AccountFeed({ account }) {
 
       {/* Error */}
       {error && !loading && (
-        <div style={{ padding: "12px 14px", color: "#555", fontSize: 10, fontFamily: "monospace" }}>
-          ⚠ {error}
-          <button onClick={load} style={{
-            marginLeft: 8, background: "transparent", border: "1px solid #222",
-            color: "#555", fontSize: 9, fontFamily: "monospace",
-            padding: "2px 6px", borderRadius: 3, cursor: "pointer",
-          }}>↻ retry</button>
+        <div style={{ padding: "12px 14px" }}>
+          <div style={{ color: "#555", fontSize: 10, fontFamily: "monospace", lineHeight: 1.6, marginBottom: 8 }}>
+            {error.includes("not configured")
+              ? <>⚠ FACEBOOK_PAGE_ACCESS_TOKEN not set.<br />See .env.example for setup.</>
+              : `⚠ ${error}`}
+          </div>
+          {!error.includes("not configured") && (
+            <button onClick={load} style={{
+              background: "transparent", border: "1px solid #222", color: "#555",
+              fontSize: 9, fontFamily: "monospace", padding: "3px 8px",
+              borderRadius: 3, cursor: "pointer",
+            }}>↻ retry</button>
+          )}
         </div>
       )}
 
-      {/* Tweets */}
-      {!loading && !error && data?.tweets?.length === 0 && (
-        <div style={{ padding: "12px 14px", color: "#444", fontSize: 10, fontFamily: "monospace" }}>No tweets found</div>
+      {/* Posts */}
+      {!loading && !error && data?.posts?.length === 0 && (
+        <div style={{ padding: "12px 14px", color: "#444", fontSize: 10, fontFamily: "monospace" }}>No posts found</div>
       )}
-      {!loading && !error && data?.tweets?.map((tweet) => (
-        <TweetCard key={tweet.id} tweet={tweet} account={account} />
+      {!loading && !error && data?.posts?.map((post) => (
+        <PostCard key={post.id} post={post} color={color} />
       ))}
     </div>
   );
 }
 
-export default function SocialPanel({ visible }) {
+export default function FacebookPanel({ visible }) {
   if (!visible) return null;
 
   return (
@@ -165,10 +175,10 @@ export default function SocialPanel({ visible }) {
         letterSpacing: "0.1em", textTransform: "uppercase",
         padding: "8px 14px", borderBottom: "1px solid #1a1a1a",
       }}>
-        𝕏 Twitter / X
+        Facebook pages
       </div>
-      {TWITTER_ACCOUNTS.map((account) => (
-        <AccountFeed key={account.id} account={account} />
+      {FACEBOOK_PAGES.map((page) => (
+        <PageFeed key={page.id} page={page} />
       ))}
       <style>{`
         @keyframes pulse { 0%, 100% { opacity: 0.5; } 50% { opacity: 1; } }
