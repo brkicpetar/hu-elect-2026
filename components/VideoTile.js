@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 
 const isHLS = (url) => url.includes(".m3u8") || url.includes("m3u8");
+const isEmbed = (url) => url.startsWith("embed:") || url.includes("player.php") || url.includes("youtube.com") || url.includes("youtu.be");
+const getEmbedUrl = (url) => url.startsWith("embed:") ? url.slice(6) : url;
 
 export default function VideoTile({ channel, isAudioActive, onActivateAudio }) {
   const videoRef = useRef(null);
@@ -12,6 +14,10 @@ export default function VideoTile({ channel, isAudioActive, onActivateAudio }) {
       setStatus("idle");
       return;
     }
+    if (isEmbed(channel.stream)) {
+      setStatus("playing");
+      return;
+    }
 
     setStatus("loading");
     let destroyed = false;
@@ -21,10 +27,8 @@ export default function VideoTile({ channel, isAudioActive, onActivateAudio }) {
       const url = channel.stream;
 
       if (isHLS(url)) {
-        // ── HLS stream ──
         const Hls = (await import("hls.js")).default;
         if (destroyed) return;
-
         if (Hls.isSupported()) {
           const hls = new Hls({ enableWorker: true, lowLatencyMode: true, backBufferLength: 30 });
           playerRef.current = hls;
@@ -44,69 +48,27 @@ export default function VideoTile({ channel, isAudioActive, onActivateAudio }) {
         } else {
           setStatus("error");
         }
-
       } else {
-        // ── Raw MPEG-TS stream via mpegts.js ──
         const mpegts = (await import("mpegts.js")).default;
         if (destroyed) return;
-
-        if (!mpegts.isSupported()) {
-          console.error("mpegts.js not supported in this browser");
-          setStatus("error");
-          return;
-        }
+        if (!mpegts.isSupported()) { setStatus("error"); return; }
 
         const player = mpegts.createPlayer(
-          {
-            type: "mpegts",
-            isLive: true,
-            url: url,
-            hasAudio: true,
-            hasVideo: true,
-          },
-          {
-            enableWorker: true,
-            enableStashBuffer: false,
-            stashInitialSize: 128,
-            liveBufferLatencyChasing: true,
-            liveBufferLatencyMaxLatency: 8,
-            liveBufferLatencyMinRemain: 2,
-            lazyLoadMaxDuration: 0,
-            seekType: "range",
-          }
+          { type: "mpegts", isLive: true, url, hasAudio: true, hasVideo: true },
+          { enableWorker: true, enableStashBuffer: false, liveBufferLatencyChasing: true,
+            liveBufferLatencyMaxLatency: 8, liveBufferLatencyMinRemain: 2 }
         );
-
         playerRef.current = player;
         player.attachMediaElement(video);
         player.load();
 
-        // mpegts.js for live streams — start playing as soon as
-        // the browser has enough data, don't wait for MEDIA_INFO
         const onCanPlay = () => {
-          if (!destroyed) {
-            setStatus("playing");
-            video.play().catch(() => {});
-          }
+          if (!destroyed) { setStatus("playing"); video.play().catch(() => {}); }
         };
-
-        const onError = (errorType, errorDetail, errorInfo) => {
-          console.error("mpegts error:", errorType, errorDetail, errorInfo);
-          if (!destroyed) setStatus("error");
-        };
-
         video.addEventListener("canplay", onCanPlay, { once: true });
-        player.on(mpegts.Events.ERROR, onError);
-
-        // Fallback: if canplay fires via mpegts events
-        player.on(mpegts.Events.MEDIA_INFO, () => {
-          console.log("mpegts MEDIA_INFO received");
-        });
-
-        // Store cleanup refs
+        player.on(mpegts.Events.ERROR, () => { if (!destroyed) setStatus("error"); });
         playerRef.current._onCanPlay = onCanPlay;
-        playerRef.current._onError = onError;
         playerRef.current._video = video;
-        playerRef.current._mpegts = mpegts;
       }
     };
 
@@ -117,17 +79,9 @@ export default function VideoTile({ channel, isAudioActive, onActivateAudio }) {
       if (playerRef.current) {
         try {
           const p = playerRef.current;
-          if (p._video && p._onCanPlay) {
-            p._video.removeEventListener("canplay", p._onCanPlay);
-          }
-          if (p.off && p._onError && p._mpegts) {
-            p.off(p._mpegts.Events.ERROR, p._onError);
-          }
+          if (p._video && p._onCanPlay) p._video.removeEventListener("canplay", p._onCanPlay);
           if (typeof p.destroy === "function") p.destroy();
-          else if (typeof p.stopLoad === "function") {
-            p.stopLoad();
-            p.detachMedia();
-          }
+          else if (typeof p.stopLoad === "function") { p.stopLoad(); p.detachMedia(); }
         } catch (e) {}
         playerRef.current = null;
       }
@@ -139,13 +93,16 @@ export default function VideoTile({ channel, isAudioActive, onActivateAudio }) {
   }, [isAudioActive]);
 
   const toggleFullscreen = () => {
-    const tile = videoRef.current?.closest(".video-tile");
+    const tile = document.getElementById(`tile-${channel.id}`);
     if (!document.fullscreenElement) tile?.requestFullscreen();
     else document.exitFullscreen();
   };
 
+  const embedUrl = channel.stream && isEmbed(channel.stream) ? getEmbedUrl(channel.stream) : null;
+
   return (
     <div
+      id={`tile-${channel.id}`}
       className="video-tile"
       style={{
         position: "relative", background: "#0a0a0a", borderRadius: "6px",
@@ -155,27 +112,43 @@ export default function VideoTile({ channel, isAudioActive, onActivateAudio }) {
       }}
       onClick={() => onActivateAudio(channel.id)}
     >
-      <video ref={videoRef} muted={!isAudioActive} playsInline
-        style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} />
+      {/* Iframe embed (e.g. Mediaklikk, YouTube) */}
+      {embedUrl ? (
+        <iframe
+          src={embedUrl}
+          style={{ width: "100%", height: "100%", border: "none", display: "block" }}
+          allowFullScreen
+          allow="autoplay; fullscreen"
+          scrolling="no"
+        />
+      ) : (
+        <video ref={videoRef} muted={!isAudioActive} playsInline
+          style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} />
+      )}
 
+      {/* Channel label */}
       <div style={{
         position: "absolute", top: 8, left: 8, background: channel.color, color: "#fff",
         fontFamily: "'DM Mono', monospace", fontWeight: 700, fontSize: 11,
         letterSpacing: "0.08em", padding: "2px 8px", borderRadius: 3, textTransform: "uppercase",
+        pointerEvents: "none",
       }}>
         {channel.name}
       </div>
 
-      {isAudioActive && (
+      {/* Audio indicator — only for non-embed streams */}
+      {isAudioActive && !embedUrl && (
         <div style={{
           position: "absolute", top: 8, right: 8, display: "flex", alignItems: "center", gap: 4,
           background: "rgba(0,0,0,0.7)", padding: "3px 7px", borderRadius: 3,
-          color: channel.color, fontSize: 10, fontFamily: "'DM Mono', monospace", letterSpacing: "0.05em",
+          color: channel.color, fontSize: 10, fontFamily: "'DM Mono', monospace",
+          letterSpacing: "0.05em", pointerEvents: "none",
         }}>
           <span style={{ fontSize: 9 }}>🔊</span> AUDIO
         </div>
       )}
 
+      {/* Status overlays */}
       {status === "loading" && (
         <div style={overlayStyle}>
           <div style={{ color: "#555", fontFamily: "monospace", fontSize: 12 }}>connecting…</div>
@@ -200,12 +173,14 @@ export default function VideoTile({ channel, isAudioActive, onActivateAudio }) {
         </div>
       )}
 
+      {/* Fullscreen button */}
       {status === "playing" && (
         <button onClick={(e) => { e.stopPropagation(); toggleFullscreen(); }}
           style={{
             position: "absolute", bottom: 8, right: 8, background: "rgba(0,0,0,0.5)",
             border: "none", color: "#aaa", cursor: "pointer",
             padding: "3px 6px", borderRadius: 3, fontSize: 12, lineHeight: 1,
+            zIndex: 10,
           }} title="Fullscreen">⛶</button>
       )}
     </div>
