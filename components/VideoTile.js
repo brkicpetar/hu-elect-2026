@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 
-const isHLS = (url) => url.includes(".m3u8") || url.includes("m3u8");
+const isHLS = (url) => url.includes(".m3u8") || url.includes("m3u8") || url.includes("/m1") || url.includes("/proxy");
 const isEmbed = (url) => url.startsWith("embed:") || url.includes("player.php") || url.includes("youtube.com") || url.includes("youtu.be");
 const getEmbedUrl = (url) => url.startsWith("embed:") ? url.slice(6) : url;
 
@@ -30,7 +30,15 @@ export default function VideoTile({ channel, isAudioActive, onActivateAudio }) {
         const Hls = (await import("hls.js")).default;
         if (destroyed) return;
         if (Hls.isSupported()) {
-          const hls = new Hls({ enableWorker: true, lowLatencyMode: true, backBufferLength: 30 });
+          const hls = new Hls({
+            enableWorker: true,
+            lowLatencyMode: false,
+            backBufferLength: 30,
+            manifestLoadingTimeOut: 20000,
+            manifestLoadingMaxRetry: 3,
+            levelLoadingTimeOut: 20000,
+            fragLoadingTimeOut: 30000,
+          });
           playerRef.current = hls;
           hls.loadSource(url);
           hls.attachMedia(video);
