@@ -7,18 +7,45 @@ export default function VideoTile({ channel, isActive, isAudioActive, onActivate
   const [isFullscreen, setIsFullscreen] = useState(false);
 
   useEffect(() => {
-    if (!channel.stream || !videoRef.current) {
-      setStatus(channel.stream ? "loading" : "idle");
+    const isConfigured = channel.stream || channel.tokenChannel || channel.useAtvProxy;
+    if (!isConfigured || !videoRef.current) {
+      setStatus("idle");
       return;
     }
 
     setStatus("loading");
 
     let hls;
+    let destroyed = false;
     const video = videoRef.current;
 
     const loadStream = async () => {
       const Hls = (await import("hls.js")).default;
+
+      // Resolve stream URL — fetch fresh token if needed
+      let streamUrl = channel.stream;
+
+      if (channel.tokenChannel) {
+        // Mediaklikk channel — fetch fresh tokenized URL from our API
+        try {
+          const res = await fetch(`/api/stream-token?channel=${channel.tokenChannel}`);
+          const data = await res.json();
+          if (data.url) {
+            streamUrl = data.url;
+          } else {
+            throw new Error(data.error || "No URL returned");
+          }
+        } catch (err) {
+          console.error("Token fetch failed:", err);
+          if (!destroyed) setStatus("error");
+          return;
+        }
+      } else if (channel.useAtvProxy) {
+        // ATV — route through our HTTPS proxy
+        streamUrl = "/api/atv-proxy";
+      }
+
+      if (destroyed) return;
 
       if (Hls.isSupported()) {
         hls = new Hls({
@@ -27,20 +54,24 @@ export default function VideoTile({ channel, isActive, isAudioActive, onActivate
           backBufferLength: 30,
         });
         hlsRef.current = hls;
-        hls.loadSource(channel.stream);
+        hls.loadSource(streamUrl);
         hls.attachMedia(video);
         hls.on(Hls.Events.MANIFEST_PARSED, () => {
-          setStatus("playing");
-          video.play().catch(() => {});
+          if (!destroyed) {
+            setStatus("playing");
+            video.play().catch(() => {});
+          }
         });
         hls.on(Hls.Events.ERROR, (_, data) => {
-          if (data.fatal) setStatus("error");
+          if (data.fatal && !destroyed) setStatus("error");
         });
       } else if (video.canPlayType("application/vnd.apple.mpegurl")) {
-        video.src = channel.stream;
+        video.src = streamUrl;
         video.addEventListener("loadedmetadata", () => {
-          setStatus("playing");
-          video.play().catch(() => {});
+          if (!destroyed) {
+            setStatus("playing");
+            video.play().catch(() => {});
+          }
         });
       } else {
         setStatus("error");
@@ -50,9 +81,10 @@ export default function VideoTile({ channel, isActive, isAudioActive, onActivate
     loadStream();
 
     return () => {
+      destroyed = true;
       if (hls) hls.destroy();
     };
-  }, [channel.stream]);
+  }, [channel.stream, channel.tokenChannel, channel.useAtvProxy]);
 
   // Mute/unmute based on audio selection
   useEffect(() => {
