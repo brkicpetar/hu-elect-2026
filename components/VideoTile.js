@@ -4,7 +4,7 @@ const isHLS = (url) => url.includes(".m3u8") || url.includes("m3u8") || url.incl
 const isEmbed = (url) => url.startsWith("embed:") || url.includes("player.php") || url.includes("youtube.com") || url.includes("youtu.be");
 const getEmbedUrl = (url) => url.startsWith("embed:") ? url.slice(6) : url;
 
-export default function VideoTile({ channel, isAudioActive, onActivateAudio, globalVolume, globalMuted }) {
+export default function VideoTile({ channel, isAudioActive, onActivateAudio }) {
   const videoRef = useRef(null);
   const playerRef = useRef(null);
   const [status, setStatus] = useState("idle");
@@ -47,12 +47,7 @@ export default function VideoTile({ channel, isAudioActive, onActivateAudio, glo
               setStatus("playing");
               video.muted = true; // must start muted for autoplay
               video.play().then(() => {
-                if (!isAudioActive) {
-                  video.muted = true;
-                } else {
-                  video.muted = globalMuted ?? false;
-                  video.volume = globalVolume ?? 0.8;
-                }
+                video.muted = !isAudioActive;
               }).catch(() => {});
             }
           });
@@ -66,12 +61,7 @@ export default function VideoTile({ channel, isAudioActive, onActivateAudio, glo
               setStatus("playing");
               video.muted = true;
               video.play().then(() => {
-                if (!isAudioActive) {
-                  video.muted = true;
-                } else {
-                  video.muted = globalMuted ?? false;
-                  video.volume = globalVolume ?? 0.8;
-                }
+                video.muted = !isAudioActive;
               }).catch(() => {});
             }
           });
@@ -118,19 +108,15 @@ export default function VideoTile({ channel, isAudioActive, onActivateAudio, glo
     };
   }, [channel.stream]);
 
-  // React to audio active tile switching + global mute/volume
+  // Mute/unmute based solely on which tile is audio-active
   useEffect(() => {
     const video = videoRef.current;
     if (!video) return;
-    if (!isAudioActive) {
-      // Non-active tiles stay muted regardless of volume slider
-      video.muted = true;
-    } else {
-      // Active tile only: apply mute toggle and volume
-      video.muted = globalMuted ?? false;
-      video.volume = globalVolume ?? 0.8;
-    }
-  }, [isAudioActive, globalMuted, globalVolume]);
+    video.muted = !isAudioActive;
+  }, [isAudioActive]);
+
+  // Volume and mute on the active tile — driven by parent via imperative ref
+  // (see index.js applyVolume) — no effect needed here
 
   const toggleFullscreen = () => {
     const tile = document.getElementById(`tile-${channel.id}`);
@@ -187,8 +173,7 @@ export default function VideoTile({ channel, isAudioActive, onActivateAudio, glo
           color: channel.color, fontSize: 10, fontFamily: "'DM Mono', monospace",
           letterSpacing: "0.05em", pointerEvents: "none",
         }}>
-          <span style={{ fontSize: 9 }}>{globalMuted ? "🔇" : "🔊"}</span>
-          {globalMuted ? "MUTED" : "AUDIO"}
+          <span style={{ fontSize: 9 }}>🔊</span> AUDIO
         </div>
       )}
 

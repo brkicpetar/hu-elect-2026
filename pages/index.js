@@ -41,13 +41,13 @@ export default function Home() {
     });
   };
 
-  // Apply volume/mute to all videos whenever they change
+  // Apply volume/mute ONLY to the currently active audio tile
   useEffect(() => {
-    document.querySelectorAll("video").forEach((v) => {
-      v.volume = volume;
-      v.muted = muted;
-    });
-  }, [volume, muted]);
+    const video = document.querySelector(`#tile-${audioChannel} video`);
+    if (!video) return;
+    video.muted = muted;
+    video.volume = volume;
+  }, [volume, muted, audioChannel]);
 
   const fetchNews = useCallback(async () => {
     try {
@@ -125,8 +125,6 @@ export default function Home() {
               <VideoTile key={channel.id} channel={channel} index={i}
                 isAudioActive={audioChannel === channel.id}
                 onActivateAudio={setAudioChannel}
-                globalVolume={volume}
-                globalMuted={muted}
               />
             ))}
           </div>
