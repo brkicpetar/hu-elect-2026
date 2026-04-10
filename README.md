@@ -7,7 +7,7 @@ This simple website has been made specifically for 2026 Hungarian parliamentary 
 
 The website has been deployed on Vercel and it's subservices have been deployed on Render.com.
 
-The data has been scraped from public sources. Included broadcasts are from public domain ([M1 TV](https://mediaklikk.hu/elo/mtv1live), [Nova Serbia](https://n1nova.live), [HirTV](https://hirtv.origo.hu/adas)).
+The data has been scraped from public sources. Included broadcasts are from public domain ([M1 TV](https://mediaklikk.hu/elo/mtv1live), [Nova Serbia](https://n1nova.live/novas-uzivo.html), [HirTV](https://hirtv.origo.hu/adas)).
 
 Data from news outlets is being scraped using official RSS feeds.
 
