@@ -19,10 +19,44 @@ export default function VideoTile({
 }) {
   const videoRef = useRef(null);
   const playerRef = useRef(null);
-  const modeRef = useRef(null); // "hls" | "mpegts"
+  const modeRef = useRef(null);
   const destroyedRef = useRef(false);
 
   const [status, setStatus] = useState("idle");
+
+  // ----------------------------
+  // CLEAN VIDEO RESET (CRITICAL)
+  // ----------------------------
+  const resetVideo = (video) => {
+    try {
+      video.pause();
+      video.removeAttribute("src");
+      video.load();
+      video.currentTime = 0;
+    } catch {}
+  };
+
+  // ----------------------------
+  // CLEANUP PLAYER
+  // ----------------------------
+  const destroyPlayer = () => {
+    const p = playerRef.current;
+
+    if (!p) return;
+
+    try {
+      if (modeRef.current === "hls") {
+        p.destroy();
+      } else if (modeRef.current === "mpegts") {
+        p.destroy?.();
+        p.stopLoad?.();
+        p.detachMedia?.();
+      }
+    } catch {}
+
+    playerRef.current = null;
+    modeRef.current = null;
+  };
 
   useEffect(() => {
     destroyedRef.current = false;
@@ -42,30 +76,14 @@ export default function VideoTile({
 
     setStatus("loading");
 
-    const cleanup = async () => {
-      const p = playerRef.current;
-      if (!p) return;
+    const loadStream = async () => {
+      destroyPlayer();
+      resetVideo(video);
 
-      try {
-        if (modeRef.current === "hls") {
-          p.destroy();
-        } else if (modeRef.current === "mpegts") {
-          p.destroy?.();
-          p.stopLoad?.();
-          p.detachMedia?.();
-        }
-      } catch {}
-
-      playerRef.current = null;
-      modeRef.current = null;
-    };
-
-    const load = async () => {
-      await cleanup();
       if (destroyedRef.current) return;
 
       // =========================
-      // HLS
+      // HLS PATH
       // =========================
       if (isHLS(url)) {
         const Hls = (await import("hls.js")).default;
@@ -103,16 +121,17 @@ export default function VideoTile({
               setStatus("error");
             }
           });
-        } else {
-          video.src = url;
-          setStatus("playing");
+
+          return;
         }
 
+        video.src = url;
+        setStatus("playing");
         return;
       }
 
       // =========================
-      // MPEGTS
+      // MPEGTS PRIMARY PATH
       // =========================
       const mpegts = (await import("mpegts.js")).default;
       if (destroyedRef.current) return;
@@ -133,13 +152,13 @@ export default function VideoTile({
         {
           enableWorker: true,
 
-          // IMPORTANT: stability > latency for TVHeadend
+          // 🔥 stability FIRST (fixes your MSE crash)
           enableStashBuffer: true,
-          stashInitialSize: 512,
+          stashInitialSize: 768,
 
           liveBufferLatencyChasing: true,
+          liveBufferLatencyMinRemain: 1,
           liveBufferLatencyMaxLatency: 8,
-          liveBufferLatencyMinRemain: 2,
         }
       );
 
@@ -149,19 +168,20 @@ export default function VideoTile({
       player.attachMediaElement(video);
       player.load();
 
+      // ----------------------------
+      // FATAL ERROR HANDLING
+      // ----------------------------
       player.on(mpegts.Events.ERROR, (_, detail) => {
-        console.warn("MPEGTS error:", detail);
+        console.warn("MPEGTS ERROR:", detail);
 
-        // HARD RESET (MSE cannot recover)
         setStatus("error");
 
-        try {
-          player.destroy();
-        } catch {}
-
-        playerRef.current = null;
+        destroyPlayer();
       });
 
+      // ----------------------------
+      // START PLAY SAFELY
+      // ----------------------------
       player.on(mpegts.Events.STREAM_LOADED, async () => {
         if (destroyedRef.current) return;
 
@@ -174,19 +194,21 @@ export default function VideoTile({
       });
     };
 
-    load();
+    loadStream();
 
     return () => {
       destroyedRef.current = true;
-      cleanup();
+      destroyPlayer();
     };
   }, [channel.stream]);
 
-  // mute sync
+  // ----------------------------
+  // AUDIO CONTROL
+  // ----------------------------
   useEffect(() => {
-    if (videoRef.current) {
-      videoRef.current.muted = !isAudioActive;
-    }
+    const video = videoRef.current;
+    if (!video) return;
+    video.muted = !isAudioActive;
   }, [isAudioActive]);
 
   const toggleFullscreen = () => {
@@ -203,13 +225,24 @@ export default function VideoTile({
   return (
     <div
       id={`tile-${channel.id}`}
+      className="video-tile"
+      style={{
+        position: "relative",
+        background: "#0a0a0a",
+        borderRadius: "6px",
+        overflow: "hidden",
+        border: isAudioActive
+          ? `2px solid ${channel.color}`
+          : "2px solid #1a1a1a",
+        aspectRatio: "16/9",
+        cursor: "pointer",
+      }}
       onClick={() => onActivateAudio(channel.id)}
-      style={wrapperStyle(channel, isAudioActive)}
     >
       {embedUrl ? (
         <iframe
           src={embedUrl}
-          style={iframeStyle}
+          style={{ width: "100%", height: "100%", border: "none" }}
           allow="autoplay; fullscreen"
           allowFullScreen
         />
@@ -218,32 +251,59 @@ export default function VideoTile({
           ref={videoRef}
           muted
           playsInline
-          style={videoStyle}
+          style={{
+            width: "100%",
+            height: "100%",
+            objectFit: "cover",
+          }}
         />
       )}
 
-      {/* UI overlays */}
-      <div style={labelStyle(channel)}>{channel.name}</div>
+      {/* LABEL */}
+      <div
+        style={{
+          position: "absolute",
+          top: 8,
+          left: 8,
+          background: channel.color,
+          color: "#fff",
+          fontSize: 11,
+          padding: "2px 8px",
+          borderRadius: 3,
+          fontFamily: "monospace",
+        }}
+      >
+        {channel.name}
+      </div>
 
+      {/* STATUS */}
       {status === "loading" && (
-        <Overlay text="connecting…" />
+        <div style={overlayStyle}>connecting…</div>
       )}
 
       {status === "error" && (
-        <Overlay
-          text="stream error"
-          sub={channel.stream?.slice(0, 40)}
-          color="#ef5350"
-        />
+        <div style={overlayStyle}>
+          stream error
+        </div>
       )}
 
+      {/* FULLSCREEN */}
       {status === "playing" && (
         <button
           onClick={(e) => {
             e.stopPropagation();
             toggleFullscreen();
           }}
-          style={fsButton}
+          style={{
+            position: "absolute",
+            bottom: 8,
+            right: 8,
+            background: "rgba(0,0,0,0.5)",
+            border: "none",
+            color: "#aaa",
+            padding: "3px 6px",
+            cursor: "pointer",
+          }}
         >
           ⛶
         </button>
@@ -252,41 +312,6 @@ export default function VideoTile({
   );
 }
 
-/* ================= UI helpers ================= */
-
-const Overlay = ({ text, sub, color = "#555" }) => (
-  <div style={overlayStyle}>
-    <div style={{ textAlign: "center" }}>
-      <div style={{ color, fontFamily: "monospace", fontSize: 12 }}>
-        {text}
-      </div>
-      {sub && (
-        <div style={{ color: "#444", fontSize: 10 }}>{sub}</div>
-      )}
-    </div>
-  </div>
-);
-
-const wrapperStyle = (channel, active) => ({
-  position: "relative",
-  background: "#0a0a0a",
-  borderRadius: 6,
-  overflow: "hidden",
-  border: active
-    ? `2px solid ${channel.color}`
-    : "2px solid #1a1a1a",
-  aspectRatio: "16/9",
-  cursor: "pointer",
-});
-
-const videoStyle = {
-  width: "100%",
-  height: "100%",
-  objectFit: "cover",
-};
-
-const iframeStyle = videoStyle;
-
 const overlayStyle = {
   position: "absolute",
   inset: 0,
@@ -294,27 +319,7 @@ const overlayStyle = {
   alignItems: "center",
   justifyContent: "center",
   background: "#0a0a0a",
-};
-
-const labelStyle = (channel) => ({
-  position: "absolute",
-  top: 8,
-  left: 8,
-  background: channel.color,
-  color: "#fff",
-  fontSize: 11,
-  padding: "2px 8px",
-  borderRadius: 3,
+  color: "#555",
   fontFamily: "monospace",
-});
-
-const fsButton = {
-  position: "absolute",
-  bottom: 8,
-  right: 8,
-  background: "rgba(0,0,0,0.5)",
-  border: "none",
-  color: "#aaa",
-  padding: "3px 6px",
-  cursor: "pointer",
+  fontSize: 12,
 };
