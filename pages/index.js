@@ -86,8 +86,6 @@ export default function Home() {
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="true" />
         <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500;700&family=DM+Sans:wght@400;500&display=swap" rel="stylesheet" />
-        <link rel="icon" type="image/x-icon" href="/favicon.ico" />
-
       </Head>
 
       <div style={{ height: "100dvh", display: "flex", flexDirection: "column", background: "#080808", color: "#e0e0e0" }}>
@@ -98,7 +96,7 @@ export default function Home() {
           }}>
             <div style={{ border: "1px solid #222", borderRadius: 8, padding: "32px 48px", textAlign: "center" }}>
               <div style={{ color: "#e53935", fontFamily: "'DM Mono', monospace", fontWeight: 700, fontSize: 13, letterSpacing: "0.12em", textTransform: "uppercase", marginBottom: 16 }}>
-                HU/ELECT 2026 — OSINT
+                HU/ELECTS 2026
               </div>
               <div style={{ color: "#e0e0e0", fontFamily: "'DM Sans', sans-serif", fontSize: 15, marginBottom: 24 }}>
                 Click anywhere to start all streams
