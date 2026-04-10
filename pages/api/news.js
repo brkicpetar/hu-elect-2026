@@ -68,7 +68,7 @@ async function translateTexts(texts) {
     const query = encodeURIComponent(texts.join("\n"));
 
     const res = await fetch(
-      `https://translate.googleapis.com/translate_a/single?client=gtx&sl=auto&tl=en&dt=t&q=${query}`
+      `https://translate.googleapis.com/translate_a/single?client=gtx&sl=hu&tl=en&dt=t&q=${query}`
     );
 
     if (!res.ok) return texts;
