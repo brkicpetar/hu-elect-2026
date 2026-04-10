@@ -2,9 +2,9 @@ import { useState, useEffect, useRef } from "react";
 import { formatDistanceToNow, parseISO } from "date-fns";
 
 const CATEGORY_COLORS = {
-  politics: "#e53935",
-  international: "#1565c0",
-  elections: "#f57f17",
+  international: "#75ba75",  
+  independent: "#1565c0",
+  government: "#ff6b01",
 };
 
 const ALERT_TTL_MS = 2 * 60 * 1000; // alert badge expires after 2 minutes
