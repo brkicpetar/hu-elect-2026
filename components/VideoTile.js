@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 
-const HLSType = ["m3u8", "/m1", "/novas", "/proxy", "/rtl"]
+const HLSType = ["m3u8", "/m1", "/novas", "/proxy"]
 
 const isHLS = (url) => HLSType.some(key => url.includes(key));
 const isEmbed = (url) => url.startsWith("embed:") || url.includes("player.php") || url.includes("youtube.com") || url.includes("youtu.be");
